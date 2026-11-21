@@ -3,30 +3,392 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>test2-claude-class</title>
+  <title>단어장</title>
   <style>
-    :root { --bg: #f7f7f5; --fg: #1d1d1b; --muted: #6b6b66; --accent: #c96442; }
+    :root {
+      --bg: #f7f7f5; --fg: #1d1d1b; --muted: #6b6b66; --accent: #c96442;
+      --surface: #ffffff; --border: #dedcd6; --accent-fg: #ffffff;
+      --ok: #2f7d4f; --ok-bg: #e4f3ea; --bad: #b3372b; --bad-bg: #f8e4e1;
+    }
     @media (prefers-color-scheme: dark) {
-      :root { --bg: #1b1b19; --fg: #ececea; --muted: #a3a39d; --accent: #e08a6a; }
+      :root {
+        --bg: #1b1b19; --fg: #ececea; --muted: #a3a39d; --accent: #e08a6a;
+        --surface: #262624; --border: #3a3a37; --accent-fg: #1b1b19;
+        --ok: #6fcf97; --ok-bg: #1f3a2a; --bad: #f08a7e; --bad-bg: #432522;
+      }
     }
     * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
     body {
-      margin: 0; min-height: 100vh; display: grid; place-items: center;
-      background: var(--bg); color: var(--fg);
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
       font-family: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
-      padding: 16px;
+      line-height: 1.5; overflow-x: hidden;
     }
-    main { max-width: 560px; text-align: center; }
-    h1 { font-size: 2rem; margin: 0 0 12px; }
-    p { color: var(--muted); line-height: 1.6; margin: 0 0 8px; }
+    main { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 1.75rem; margin: 0 0 4px; text-align: center; }
     .dot { color: var(--accent); }
+    .sub { color: var(--muted); text-align: center; margin: 0 0 20px; }
+
+    button, input { font: inherit; color: inherit; }
+    button {
+      min-height: 44px; padding: 0 16px; border-radius: 10px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--surface);
+    }
+    button:hover { border-color: var(--accent); }
+    button:focus-visible, input:focus-visible, .card:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px;
+    }
+    button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+    button:disabled { opacity: .5; cursor: default; }
+
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+    .tab {
+      flex: 1; border: 0; border-bottom: 3px solid transparent; border-radius: 10px 10px 0 0;
+      background: transparent; color: var(--muted); padding: 0 6px;
+    }
+    .tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+    [hidden] { display: none !important; }
+
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row > input { flex: 1 1 140px; min-width: 0; }
+    input {
+      min-height: 44px; padding: 0 12px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--surface);
+    }
+    .msg { min-height: 1.5em; margin: 8px 0; font-size: .9rem; color: var(--muted); }
+    .msg.err { color: var(--bad); }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+    .count { color: var(--muted); }
+
+    ul.words { list-style: none; margin: 0; padding: 0; }
+    ul.words li {
+      display: flex; align-items: center; gap: 8px; padding: 6px 0 6px 12px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px;
+    }
+    .w-en { font-weight: 600; flex: 0 1 40%; overflow-wrap: anywhere; }
+    .w-ko { flex: 1; color: var(--muted); overflow-wrap: anywhere; }
+    .del { flex: none; min-width: 44px; padding: 0 10px; margin-right: 6px; color: var(--bad); }
+    .empty { color: var(--muted); text-align: center; padding: 24px 0; }
+
+    /* Flashcard */
+    .scene { perspective: 900px; margin-bottom: 16px; }
+    .card {
+      position: relative; height: 220px; width: 100%; cursor: pointer;
+      transform-style: preserve-3d; transition: transform .5s ease; border-radius: 16px;
+    }
+    .card.flipped { transform: rotateY(180deg); }
+    .face {
+      position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
+      text-align: center; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+      font-size: 1.9rem; font-weight: 600; overflow-wrap: anywhere;
+    }
+    .face.back { transform: rotateY(180deg); color: var(--accent); }
+    .hint { color: var(--muted); font-size: .85rem; text-align: center; margin: 0 0 12px; }
+    .pos { text-align: center; color: var(--muted); margin: 0 0 12px; }
+    .controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+    @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+
+    /* Quiz */
+    .q-label { color: var(--muted); font-size: .9rem; text-align: center; margin: 0; }
+    .q-text { font-size: 1.8rem; font-weight: 600; text-align: center; margin: 6px 0 16px; overflow-wrap: anywhere; }
+    .opts { display: grid; gap: 8px; margin-bottom: 12px; }
+    .opt { text-align: left; padding: 10px 14px; }
+    .opt.ok { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+    .opt.bad { background: var(--bad-bg); border-color: var(--bad); color: var(--bad); }
+    .feedback { min-height: 1.5em; text-align: center; font-weight: 600; margin: 0 0 12px; }
+    .feedback.ok { color: var(--ok); } .feedback.bad { color: var(--bad); }
+    .score { text-align: center; color: var(--muted); margin: 16px 0 12px; }
   </style>
 </head>
 <body>
-  <main>
-    <h1>test2-claude-class<span class="dot">.</span></h1>
-    <p>안녕하세요! Claude 수업 실습용 페이지입니다.</p>
-    <p>Hello! This is a practice page for the Claude class.</p>
-  </main>
+<main>
+  <h1>단어장<span class="dot">.</span></h1>
+  <p class="sub">영어 단어를 추가하고, 카드로 외우고, 퀴즈로 확인하세요.</p>
+
+  <div class="tabs" role="tablist" aria-label="보기 전환">
+    <button class="tab" role="tab" id="tab-list" aria-controls="panel-list" aria-selected="true" data-tab="list">단어 목록</button>
+    <button class="tab" role="tab" id="tab-cards" aria-controls="panel-cards" aria-selected="false" data-tab="cards">플래시카드</button>
+    <button class="tab" role="tab" id="tab-quiz" aria-controls="panel-quiz" aria-selected="false" data-tab="quiz">퀴즈</button>
+  </div>
+
+  <section id="panel-list" role="tabpanel" aria-labelledby="tab-list">
+    <form id="add-form" class="row" autocomplete="off">
+      <input id="in-en" type="text" placeholder="영어 단어" aria-label="영어 단어" maxlength="80">
+      <input id="in-ko" type="text" placeholder="한국어 뜻" aria-label="한국어 뜻" maxlength="120">
+      <button type="submit" class="primary">추가</button>
+    </form>
+    <div id="add-msg" class="msg" role="status" aria-live="polite"></div>
+    <div class="toolbar">
+      <span id="count" class="count"></span>
+      <button type="button" id="btn-reset">기본 단어로 초기화</button>
+    </div>
+    <ul id="word-list" class="words"></ul>
+  </section>
+
+  <section id="panel-cards" role="tabpanel" aria-labelledby="tab-cards" hidden>
+    <div id="cards-empty" class="empty" hidden>단어가 없습니다. 먼저 단어를 추가하세요.</div>
+    <div id="cards-body">
+      <p id="card-pos" class="pos" aria-live="polite"></p>
+      <div class="scene">
+        <div id="card" class="card" role="button" tabindex="0" aria-label="카드 뒤집기">
+          <div class="face front" id="card-front"></div>
+          <div class="face back" id="card-back"></div>
+        </div>
+      </div>
+      <p class="hint">카드를 누르면 뜻이 보입니다.</p>
+      <div class="controls">
+        <button type="button" id="btn-prev">이전</button>
+        <button type="button" id="btn-flip" class="primary">뒤집기</button>
+        <button type="button" id="btn-next">다음</button>
+        <button type="button" id="btn-shuffle">섞기</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="panel-quiz" role="tabpanel" aria-labelledby="tab-quiz" hidden>
+    <div id="quiz-empty" class="empty" hidden>퀴즈는 단어가 4개 이상 있어야 풀 수 있습니다.</div>
+    <div id="quiz-body">
+      <p class="q-label">다음 뜻에 맞는 영어 단어는?</p>
+      <p id="q-text" class="q-text"></p>
+      <div id="opts" class="opts"></div>
+      <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
+      <div class="controls">
+        <button type="button" id="btn-qnext" class="primary" disabled>다음 문제</button>
+        <button type="button" id="btn-qrestart">다시 시작</button>
+      </div>
+      <p id="score" class="score"></p>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var KEY = "vocab.words.v1";
+  var STARTER = [
+    ["apple", "사과"], ["book", "책"], ["water", "물"], ["friend", "친구"], ["house", "집"],
+    ["school", "학교"], ["happy", "행복한"], ["beautiful", "아름다운"], ["quickly", "빠르게"], ["travel", "여행하다"],
+    ["language", "언어"], ["memory", "기억"], ["difficult", "어려운"], ["important", "중요한"], ["family", "가족"],
+    ["weather", "날씨"], ["library", "도서관"], ["borrow", "빌리다"], ["decide", "결정하다"], ["improve", "향상시키다"]
+  ];
+
+  // ---- Storage (every access guarded; falls back to memory) ----
+  function starterWords() {
+    return STARTER.map(function (p) { return { en: p[0], ko: p[1] }; });
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw === null) return null;
+      var data = JSON.parse(raw);
+      if (!Array.isArray(data)) return null;
+      return data.filter(function (w) {
+        return w && typeof w.en === "string" && typeof w.ko === "string";
+      }).map(function (w) { return { en: w.en, ko: w.ko }; });
+    } catch (e) { return null; }
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(words)); } catch (e) { /* memory only */ }
+  }
+
+  var words = load();
+  if (words === null) { words = starterWords(); save(); }
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---- Tabs ----
+  var tabs = document.querySelectorAll(".tab");
+  function showTab(name) {
+    Array.prototype.forEach.call(tabs, function (t) {
+      var on = t.getAttribute("data-tab") === name;
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      $("panel-" + t.getAttribute("data-tab")).hidden = !on;
+    });
+    if (name === "cards") renderCard();
+    if (name === "quiz") renderQuiz();
+  }
+  Array.prototype.forEach.call(tabs, function (t) {
+    t.addEventListener("click", function () { showTab(t.getAttribute("data-tab")); });
+  });
+
+  // ---- Word list ----
+  function setMsg(text, isErr) {
+    var el = $("add-msg");
+    el.textContent = text || "";
+    el.className = "msg" + (isErr ? " err" : "");
+  }
+  function renderList() {
+    var ul = $("word-list");
+    ul.textContent = "";
+    $("count").textContent = "단어 " + words.length + "개";
+    if (!words.length) {
+      var li0 = document.createElement("li");
+      li0.className = "empty"; li0.style.display = "block"; li0.style.border = "0";
+      li0.textContent = "아직 단어가 없습니다.";
+      ul.appendChild(li0);
+      return;
+    }
+    words.forEach(function (w, i) {
+      var li = document.createElement("li");
+      var en = document.createElement("span"); en.className = "w-en"; en.textContent = w.en;
+      var ko = document.createElement("span"); ko.className = "w-ko"; ko.textContent = w.ko;
+      var del = document.createElement("button");
+      del.type = "button"; del.className = "del"; del.textContent = "삭제";
+      del.setAttribute("aria-label", w.en + " 삭제");
+      del.addEventListener("click", function () { removeWord(i); });
+      li.appendChild(en); li.appendChild(ko); li.appendChild(del);
+      ul.appendChild(li);
+    });
+  }
+  function addWord(en, ko) {
+    en = en.trim(); ko = ko.trim();
+    if (!en || !ko) { setMsg("영어 단어와 한국어 뜻을 모두 입력하세요.", true); return false; }
+    var lower = en.toLowerCase();
+    if (words.some(function (w) { return w.en.toLowerCase() === lower; })) {
+      setMsg("이미 있는 단어입니다: " + en, true); return false;
+    }
+    words.push({ en: en, ko: ko });
+    save();
+    setMsg("추가했습니다: " + en, false);
+    afterWordsChanged();
+    return true;
+  }
+  function removeWord(i) {
+    words.splice(i, 1);
+    save();
+    setMsg("", false);
+    afterWordsChanged();
+  }
+  function afterWordsChanged() {
+    renderList();
+    // Reset dependent views so they never reference removed words.
+    order = words.map(function (_, i) { return i; });
+    if (cardIdx >= order.length) cardIdx = Math.max(0, order.length - 1);
+    flipped = false;
+    resetQuiz();
+  }
+
+  $("add-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var enEl = $("in-en"), koEl = $("in-ko");
+    if (addWord(enEl.value, koEl.value)) { enEl.value = ""; koEl.value = ""; enEl.focus(); }
+  });
+  $("btn-reset").addEventListener("click", function () {
+    if (!confirm("모든 단어를 지우고 기본 단어로 되돌릴까요?")) return;
+    words = starterWords();
+    save();
+    setMsg("기본 단어로 초기화했습니다.", false);
+    afterWordsChanged();
+  });
+
+  // ---- Flashcards ----
+  var order = words.map(function (_, i) { return i; });
+  var cardIdx = 0, flipped = false;
+  function renderCard() {
+    var has = order.length > 0;
+    $("cards-empty").hidden = has;
+    $("cards-body").hidden = !has;
+    if (!has) return;
+    var w = words[order[cardIdx]];
+    $("card-front").textContent = w.en;
+    $("card-back").textContent = w.ko;
+    $("card").classList.toggle("flipped", flipped);
+    $("card-pos").textContent = (cardIdx + 1) + " / " + order.length;
+  }
+  function moveCard(d) {
+    if (!order.length) return;
+    cardIdx = (cardIdx + d + order.length) % order.length;
+    flipped = false;
+    renderCard();
+  }
+  function flip() { flipped = !flipped; $("card").classList.toggle("flipped", flipped); }
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+  $("card").addEventListener("click", flip);
+  $("card").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); }
+  });
+  $("btn-flip").addEventListener("click", flip);
+  $("btn-prev").addEventListener("click", function () { moveCard(-1); });
+  $("btn-next").addEventListener("click", function () { moveCard(1); });
+  $("btn-shuffle").addEventListener("click", function () {
+    shuffle(order); cardIdx = 0; flipped = false; renderCard();
+  });
+
+  // ---- Quiz ----
+  var solved = 0, correct = 0, current = null, answered = false;
+  function renderScore() {
+    var pct = solved ? Math.round(correct / solved * 100) : 0;
+    $("score").textContent = "맞음 " + correct + " / 푼 문제 " + solved + " (정확도 " + pct + "%)";
+  }
+  function resetQuiz() {
+    solved = 0; correct = 0; current = null; answered = false;
+    renderQuiz();
+  }
+  function nextQuestion() {
+    var idx = Math.floor(Math.random() * words.length);
+    // Avoid repeating the same word twice in a row when possible.
+    if (current && words.length > 1 && words[idx] === current.word) idx = (idx + 1) % words.length;
+    var word = words[idx];
+    var others = words.filter(function (w) { return w !== word; });
+    var opts = shuffle(others).slice(0, 3);
+    opts.push(word);
+    shuffle(opts);
+    current = { word: word, opts: opts };
+    answered = false;
+  }
+  function renderQuiz() {
+    var ok = words.length >= 4;
+    $("quiz-empty").hidden = ok;
+    $("quiz-body").hidden = !ok;
+    if (!ok) return;
+    if (!current) nextQuestion();
+    $("q-text").textContent = current.word.ko;
+    var box = $("opts");
+    box.textContent = "";
+    current.opts.forEach(function (w) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "opt"; b.textContent = w.en;
+      b.addEventListener("click", function () { answer(w, b); });
+      box.appendChild(b);
+    });
+    var fb = $("feedback"); fb.textContent = ""; fb.className = "feedback";
+    $("btn-qnext").disabled = true;
+    renderScore();
+  }
+  function answer(w, btn) {
+    if (answered) return;
+    answered = true;
+    solved++;
+    var fb = $("feedback");
+    var btns = $("opts").children;
+    Array.prototype.forEach.call(btns, function (b) {
+      b.disabled = true;
+      if (b.textContent === current.word.en) b.classList.add("ok");
+    });
+    if (w === current.word) {
+      correct++;
+      fb.textContent = "정답입니다!"; fb.className = "feedback ok";
+    } else {
+      btn.classList.add("bad");
+      fb.textContent = "오답입니다. 정답: " + current.word.en; fb.className = "feedback bad";
+    }
+    $("btn-qnext").disabled = false;
+    renderScore();
+  }
+  $("btn-qnext").addEventListener("click", function () { nextQuestion(); renderQuiz(); });
+  $("btn-qrestart").addEventListener("click", function () { resetQuiz(); });
+
+  renderList();
+  renderCard();
+})();
+</script>
 </body>
 </html>
